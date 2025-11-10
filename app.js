@@ -208,6 +208,63 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
     particles.push(createParticle());
 }
 
+/* ---------- Mobile / low-power optimization (post-init) ---------- */
+(function optimizeParticlesForDevice() {
+    const w = window.innerWidth;
+    const isMobileWidth = w <= 720 || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+
+    if (isMobileWidth) {
+        // Уменьшим количество частиц (trim массив), чтобы снизить нагрузку
+        const targetCount = Math.max(18, Math.floor(PARTICLE_COUNT * 0.35));
+        if (particles.length > targetCount) {
+            particles.splice(targetCount, particles.length - targetCount);
+        }
+
+        // Замедлим и упростим частицам поведение
+        particles.forEach(p => {
+            p.speedY *= 0.55;         // медленнее вверх
+            p.speedX *= 0.6;          // меньше разброс по сторонам
+            p.angularSpeed *= 0.6;    // меньше вращения
+            p.radius *= 0.85;         // немного меньше размер
+            p.maxLife = Math.max(40, p.maxLife * 0.8); // чуть короче жизнь
+        });
+
+        // Уменьшим расстояние соединения линий, чтобы меньше линий рисовалось
+        if (typeof LINE_DISTANCE !== 'undefined') {
+            try {
+                // если LINE_DISTANCE — const, мы не можем перезаписать; создадим локальный override
+                window.__LINE_DISTANCE_OVERRIDE = Math.max(40, Math.floor(LINE_DISTANCE * 0.45));
+            } catch (e) {
+                window.__LINE_DISTANCE_OVERRIDE = Math.max(40, 60);
+            }
+        } else {
+            window.__LINE_DISTANCE_OVERRIDE = 60;
+        }
+
+        // Установим более низкий devicePixelRatio для канваса рендера (экономия)
+        const dpr = Math.min(1, window.devicePixelRatio || 1);
+        canvas.style.width = `${window.innerWidth}px`;
+        canvas.style.height = `${window.innerHeight}px`;
+        canvas.width = Math.floor(window.innerWidth * dpr);
+        canvas.height = Math.floor(window.innerHeight * dpr);
+        ctx.scale(dpr, dpr);
+    }
+
+    // реагируем на поворот/изменение размеров и повторно оптимизируем
+    let optTimer = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(optTimer);
+        optTimer = setTimeout(() => {
+            // на ресайзе — если мобильный режим включился/выключился — перезагружаем оптимизацию
+            const nowMobile = window.innerWidth <= 720 || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+            if (nowMobile !== isMobileWidth) {
+                location.reload(); // простое решение: перезагрузить страницу, чтобы применить корректные настройки
+            }
+        }, 220);
+    });
+})();
+
+
 // --- Рендер частиц и линий ---
 function drawParticles() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -220,7 +277,8 @@ function drawParticles() {
             const dy = p1.y - p2.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < LINE_DISTANCE) {
+            const lineDist = (typeof window.__LINE_DISTANCE_OVERRIDE === 'number') ? window.__LINE_DISTANCE_OVERRIDE : LINE_DISTANCE;
+            if (dist < lineDist) {
                 const alpha = LINE_MERCY + LINE_MERCY * Math.sin(Date.now() / 300 + (p1.x + p2.x)/50);
 
                 // Выбор цвета линии
