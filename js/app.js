@@ -397,7 +397,7 @@ siteBackdrop.addEventListener('click', togglePanel);
 openSiteBtns.forEach(btn=>{
     btn.addEventListener('click', (e)=>{
         const url = btn.dataset.url;
-        if(url) window.open(url,'_blank');
+        if(url) window.location.href = url;
     });
 });
 
