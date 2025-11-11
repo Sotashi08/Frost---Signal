@@ -129,32 +129,77 @@ drawParticles();
 
 window.addEventListener('beforeunload',()=>{if(snakeAnimationFrame) cancelAnimationFrame(snakeAnimationFrame); if(snakeGlowTimeout) clearTimeout(snakeGlowTimeout);});
 
-// --- Site Panel ---
+
+
+
+// --- Site Panel (optimized toggle, focus + scroll lock) ---
 const siteLauncherBtn = document.getElementById('siteLauncherBtn');
 const sitePanel = document.getElementById('sitePanel');
 const siteBackdrop = document.getElementById('siteBackdrop');
 const openSiteBtns = document.querySelectorAll('.open-site-btn');
 
-function togglePanel() {
-    const isHidden = sitePanel.getAttribute('aria-hidden') === 'true';
-    sitePanel.setAttribute('aria-hidden', !isHidden);
+// store last focused element to restore focus on close
+let lastFocusedEl = null;
+
+function isPanelOpen(){
+    return sitePanel && sitePanel.getAttribute('aria-hidden') === 'false';
 }
 
-// --- Event Listeners ---
-siteLauncherBtn.addEventListener('click', togglePanel);
-siteBackdrop.addEventListener('click', togglePanel);
+function openPanel(){
+    if(!sitePanel) return;
+    lastFocusedEl = document.activeElement;
+    sitePanel.setAttribute('aria-hidden','false');
+    // lock scroll
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    // move focus to the first actionable element in panel
+    const firstBtn = sitePanel.querySelector('.open-site-btn, .btn, a[href]');
+    if(firstBtn) firstBtn.focus();
+}
 
-// --- Open sites in new window ---
+function closePanel(){
+    if(!sitePanel) return;
+    sitePanel.setAttribute('aria-hidden','true');
+    // restore scroll
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+    // restore focus
+    try{ if(lastFocusedEl) lastFocusedEl.focus(); }catch(e){}
+}
+
+// toggle (launcher acts as open/close)
+function togglePanel(){
+    if(isPanelOpen()) closePanel(); else openPanel();
+}
+
+// handlers
+siteLauncherBtn && siteLauncherBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    togglePanel();
+});
+
+// backdrop click closes
+siteBackdrop && siteBackdrop.addEventListener('click', (e)=>{
+    if(isPanelOpen()) closePanel();
+});
+
+// keyboard: Esc closes panel
+document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Escape' && isPanelOpen()){
+        e.preventDefault();
+        closePanel();
+    }
+});
+
+// open site in same tab (current behavior)
 openSiteBtns.forEach(btn=>{
     btn.addEventListener('click', (e)=>{
         const url = btn.dataset.url;
-        if(url) window.location.href = url;
-    });
+        if(!url) return;
+        // small UX improvement: close panel, then navigate so user sees transition
+        closePanel();
+        // slight delay to let close transition start (tweakable)
+        setTimeout(()=> { window.location.href = url; }, 220);
+    }, { passive: true });
 });
 
-// --- Keyboard Esc to close ---
-document.addEventListener('keydown', (e)=>{
-    if(e.key==='Escape' && sitePanel.getAttribute('aria-hidden')==='false'){
-        sitePanel.setAttribute('aria-hidden','true');
-    }
-});
